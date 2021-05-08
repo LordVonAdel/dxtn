@@ -1,0 +1,15 @@
+{
+  "name": "dxtn",
+  "version": "1.0.0",
+  "description": "Converts DXT compressed image data to RGBA8888 and back",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Adrian Urban",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "pngjs": "^6.0.0"
+  }
+}
