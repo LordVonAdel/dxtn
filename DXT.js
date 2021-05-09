@@ -11,6 +11,8 @@ const RGBABlockSize = 64;
 const BlockWidth = 4;
 const BlockHeight = 4;
 
+const AlphaTest = 127;
+
 const Utils = require("./DXTUtils.js");
 
 function compressBlockDXT1(pixels, outArray = null, forceNoAlpha = false) {
@@ -45,7 +47,7 @@ function compressBlockDXT1(pixels, outArray = null, forceNoAlpha = false) {
   let c0 = ((maxR & 0b11111000) << 8) + ((maxG & 0b11111100) << 3) + ((maxB & 0b11111000) >> 3);
   let c1 = ((minR & 0b11111000) << 8) + ((minG & 0b11111100) << 3) + ((minB & 0b11111000) >> 3);
 
-  if (minA < 127 && !forceNoAlpha) {
+  if (minA < AlphaTest && !forceNoAlpha) {
     let temp = c0;
     c0 = c1;
     c1 = temp;
@@ -85,7 +87,7 @@ function compressBlockDXT3(pixels, outArray = null) {
   compressBlockDXT1(pixels, out, true);
   for (let i = 0; i < 8; i++) {
     out[8 + i] = out[i];
-    out[i] = 0xff;
+    out[i] = (pixels[i*8 + 3] & 0xf0) | ((pixels[i*8 + 7] & 0xf0) >> 4);
   }
   return out;
 }
@@ -156,8 +158,8 @@ function compress(width, height, pixels, compression) {
     }
 
     let compressed = compression.blockCompressMethod(rgbaBlock, dxtBlock);
-    for (let j = 0; j < DXT1BlockSize; j++) {
-      buffer[i * DXT1BlockSize + j] = compressed[j];
+    for (let j = 0; j < compression.blockSize; j++) {
+      buffer[i * compression.blockSize + j] = compressed[j];
     }
   }
 
@@ -178,7 +180,7 @@ function decompress(width, height, data, compression) {
   let out = new Uint8Array(width * height * 4);
 
   for (let i = 0; i < blockNumber; i++) {
-    let decompressed = compression.blockDecompressMethod(data.slice(i * DXT1BlockSize, (i+1) * compression.blockSize), out);
+    let decompressed = compression.blockDecompressMethod(data.slice(i * compression.blockSize, (i+1) * compression.blockSize), out);
     let pixelX = (i % w) * 4;
     let pixelY = Math.floor(i / w) * 4;
 
