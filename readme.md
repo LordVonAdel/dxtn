@@ -2,7 +2,7 @@
 Converts DXT compressed images to RGBA8888 and back.
 
 ## Supported formats:
-- DXT1
+- DXT1 / BC1
 
 ## Example
 ```js

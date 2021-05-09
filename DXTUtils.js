@@ -34,20 +34,20 @@ module.exports = {
       palette[2] = Math.floor((color0.B) * 255);
       palette[3] = Math.floor(255);
 
-      palette[4] = Math.floor(0);
-      palette[5] = Math.floor(0);
-      palette[6] = Math.floor(0);
-      palette[7] = Math.floor(0);
+      palette[4] = Math.floor((color0.R * 1/2 + color1.R * 1/2 ) * 255);
+      palette[5] = Math.floor((color0.G * 1/2 + color1.G * 1/2 ) * 255);
+      palette[6] = Math.floor((color0.B * 1/2 + color1.B * 1/2 ) * 255);
+      palette[7] = Math.floor(255);
 
-      palette[8] = Math.floor((color0.R * 1/2 + color1.R * 1/2 ) * 255);
-      palette[9] = Math.floor((color0.G * 1/2 + color1.G * 1/2 ) * 255);
-      palette[10] = Math.floor((color0.B * 1/2 + color1.B * 1/2 ) * 255);
+      palette[08] = Math.floor((color1.R) * 255);
+      palette[09] = Math.floor((color1.G) * 255);
+      palette[10] = Math.floor((color1.B) * 255);
       palette[11] = Math.floor(255);
 
-      palette[12] = Math.floor((color1.R) * 255);
-      palette[13] = Math.floor((color1.G) * 255);
-      palette[14] = Math.floor((color1.B) * 255);
-      palette[15] = Math.floor(255);
+      palette[12] = Math.floor(0);
+      palette[13] = Math.floor(0);
+      palette[14] = Math.floor(0);
+      palette[15] = Math.floor(0);
     }
 
     return palette;
