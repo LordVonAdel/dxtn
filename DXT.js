@@ -13,7 +13,12 @@ const BlockHeight = 4;
 
 const AlphaTest = 127;
 
-const Utils = require("./DXTUtils.js");
+const DXTUtils = require("./DXTUtils.js");
+
+// Temp buffers. Allocate upfront and reuse for calls to increase performance
+const alphaLookupBuffer = new Uint8Array(8);
+const colorLookupBuffer = new Uint8Array(16);
+const tmpDXT5AlphaBuffer = new Uint8Array(16);
 
 function compressBlockDXT1(pixels, outArray = null, forceNoAlpha = false) {
   let maxR = 0;
@@ -57,13 +62,13 @@ function compressBlockDXT1(pixels, outArray = null, forceNoAlpha = false) {
     }
   }
 
-  let lookup = Utils.generateDXT1Lookup(c0, c1);
+  let lookup = DXTUtils.generateDXT1Lookup(c0, c1, colorLookupBuffer);
 
   let out = outArray || new Uint8Array(DXT1BlockSize);
   let indices = [];
 
   for (let i = 0; i < pixels.length; i+= 4) {
-    let index = Utils.findNearestOnLookup([
+    let index = DXTUtils.findNearestOnLookup([
       pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]
     ], lookup);
     indices.push(index);
@@ -90,7 +95,7 @@ function compressBlockDXT3(pixels, outArray = null) {
     out[8 + i * 2] = out[i * 2];
     out[9 + i * 2] = out[i * 2 + 1];
 
-    out[i * 2] =     ((pixels[i * 16 + 11] & 0xf0) >> 0) | ((pixels[i * 16 + 15] & 0xf0) >> 4);
+    out[i * 2 + 0] = ((pixels[i * 16 + 11] & 0xf0) >> 0) | ((pixels[i * 16 + 15] & 0xf0) >> 4);
     out[i * 2 + 1] = ((pixels[i * 16 + 07] & 0xf0) >> 4) | ((pixels[i * 16 + 03] & 0xf0) >> 0);
   }
   return out;
@@ -106,19 +111,53 @@ function compressBlockDXT5(pixels, outArray = null) {
     maxAlpha = Math.max(pixels[i * 4 + 3], maxAlpha);
   }
 
+  for (let i = 0; i < 8; i++) {
+    out[i + 8] = out[i];
+  }
+
   out[0] = minAlpha;
   out[1] = maxAlpha;
   
-  let alphaLookup = [
-    minAlpha, 
-    maxAlpha
-  ];
+  let alphaLookup = DXTUtils.generateDXT5AlphaLookup(minAlpha, maxAlpha, alphaLookupBuffer);
 
-  alphaValues = new Uint8Array(16);
+  let alphaIndices = tmpDXT5AlphaBuffer;
   for (let i = 0; i < 16; i++) {
     let srcAlpha = pixels[i * 4 + 3];
-    srcAlpha -= minAlpha;    
+    let nearestIndex = 0;
+    let nearestDistance = 255;
+    for (let j = 0; j < 8; j++) {
+      let delta = Math.abs(srcAlpha - alphaLookup[j]);
+      if (delta < nearestDistance) {
+        nearestDistance = delta;
+        nearestIndex = j;
+      }
+    }
+    alphaIndices[i] = nearestIndex;
   }
+
+  let out234 = alphaIndices[3] 
+            | (alphaIndices[2] << 3) 
+            | (alphaIndices[1] << 6) 
+            | (alphaIndices[0] << 9) 
+            | (alphaIndices[7] << 12) 
+            | (alphaIndices[6] << 15) 
+            | (alphaIndices[5] << 18) 
+            | (alphaIndices[4] << 21);
+  out[2] = (out234 & 0x0000ff);
+  out[3] = (out234 & 0x00ff00) >> 8;
+  out[4] = (out234 & 0xff0000) >> 16;
+
+  let out567 = alphaIndices[11] 
+  | (alphaIndices[10] << 3) 
+  | (alphaIndices[09] << 6) 
+  | (alphaIndices[08] << 9) 
+  | (alphaIndices[15] << 12) 
+  | (alphaIndices[14] << 15) 
+  | (alphaIndices[13] << 18) 
+  | (alphaIndices[12] << 21);
+  out[5] = (out567 & 0x0000ff);
+  out[6] = (out567 & 0x00ff00) >> 8;
+  out[7] = (out567 & 0xff0000) >> 16;
 
   return out;
 }
@@ -128,7 +167,7 @@ function decompressBlockDXT1(data, outArray = null) {
 
   const cVal0 = (data[1] << 8) + data[0];
   const cVal1 = (data[3] << 8) + data[2];
-  const lookup = Utils.generateDXT1Lookup(cVal0, cVal1);
+  const lookup = DXTUtils.generateDXT1Lookup(cVal0, cVal1);
 
   const out = outArray || new Uint8Array(RGBABlockSize);
   for (let i = 0; i < 16; i++) {
@@ -152,7 +191,7 @@ function decompressBlockDXT3(data, outArray = null) {
   for (let i = 0; i < 8; i++) {
     out[i * 8 + 3] = (data[i] & 0x0f) << 4; 
     out[i * 8 + 7] = (data[i] & 0xf0);
-  } 
+  }
 
   return out;
 }
@@ -164,44 +203,24 @@ function decompressBlockDXT5(data, outArray = null) {
   let alpha0 = data[0];
   let alpha1 = data[1];
 
-  let alphaLookup = new Uint8Array(8);
-  alphaLookup[0] = alpha0;
-  alphaLookup[1] = alpha1;
-  if (alpha0 > alpha1) {
-    alphaLookup[2] = Math.round((6 * alpha0 + 1 * alpha1) / 7);
-    alphaLookup[3] = Math.round((5 * alpha0 + 2 * alpha1) / 7);
-    alphaLookup[4] = Math.round((4 * alpha0 + 3 * alpha1) / 7);
-    alphaLookup[5] = Math.round((3 * alpha0 + 4 * alpha1) / 7);
-    alphaLookup[6] = Math.round((2 * alpha0 + 5 * alpha1) / 7);
-    alphaLookup[7] = Math.round((1 * alpha0 + 6 * alpha1) / 7);
-  } else {
-    alphaLookup[2] = Math.round((4 * alpha0 + 1 * alpha1) / 5);
-    alphaLookup[3] = Math.round((3 * alpha0 + 2 * alpha1) / 5);
-    alphaLookup[4] = Math.round((2 * alpha0 + 3 * alpha1) / 5);
-    alphaLookup[5] = Math.round((1 * alpha0 + 4 * alpha1) / 5);
-    alphaLookup[6] = 0;
-    alphaLookup[7] = 255;
-  }
-  
-  let alphaBytes = [data[4], data[3], data[2], data[7], data[6], data[5]];
+  let alphaLookup = DXTUtils.generateDXT5AlphaLookup(alpha0, alpha1, alphaLookupBuffer);
+  out[31] = alphaLookup[ (data[4] & 0b11100000) >> 5];
+  out[27] = alphaLookup[ (data[4] & 0b00011100) >> 2];
+  out[23] = alphaLookup[((data[4] & 0b00000011) << 1) + ((data[3] & 0b10000000) >> 7)];
+  out[19] = alphaLookup[ (data[3] & 0b01110000) >> 4];
+  out[15] = alphaLookup[ (data[3] & 0b00001110) >> 1];
+  out[11] = alphaLookup[((data[3] & 0b00000001) << 2) + ((data[2] & 0b11000000) >> 6)];
+  out[07] = alphaLookup[ (data[2] & 0b00111000) >> 3];
+  out[03] = alphaLookup[ (data[2] & 0b00000111) >> 0];
 
-  out[31] = alphaLookup[ (alphaBytes[0] & 0b11100000) >> 5];
-  out[27] = alphaLookup[ (alphaBytes[0] & 0b00011100) >> 2];
-  out[23] = alphaLookup[((alphaBytes[0] & 0b00000011) << 1) + ((alphaBytes[1] & 0b10000000) >> 7)];
-  out[19] = alphaLookup[ (alphaBytes[1] & 0b01110000) >> 4];
-  out[15] = alphaLookup[ (alphaBytes[1] & 0b00001110) >> 1];
-  out[11] = alphaLookup[((alphaBytes[1] & 0b00000001) << 2) + ((alphaBytes[2] & 0b11000000) >> 6)];
-  out[07] = alphaLookup[ (alphaBytes[2] & 0b00111000) >> 3];
-  out[03] = alphaLookup[ (alphaBytes[2] & 0b00000111) >> 0];
-
-  out[63] = alphaLookup[ (alphaBytes[3] & 0b11100000) >> 5];
-  out[59] = alphaLookup[ (alphaBytes[3] & 0b00011100) >> 2];
-  out[55] = alphaLookup[((alphaBytes[3] & 0b00000011) << 1) + ((alphaBytes[4] & 0b10000000) >> 7)];
-  out[51] = alphaLookup[ (alphaBytes[4] & 0b01110000) >> 4];
-  out[47] = alphaLookup[ (alphaBytes[4] & 0b00001110) >> 1];
-  out[43] = alphaLookup[((alphaBytes[4] & 0b00000001) << 2) + ((alphaBytes[5] & 0b11000000) >> 6)];
-  out[39] = alphaLookup[ (alphaBytes[5] & 0b00111000) >> 3];
-  out[35] = alphaLookup[ (alphaBytes[5] & 0b00000111) >> 0];
+  out[63] = alphaLookup[ (data[7] & 0b11100000) >> 5];
+  out[59] = alphaLookup[ (data[7] & 0b00011100) >> 2];
+  out[55] = alphaLookup[((data[7] & 0b00000011) << 1) + ((data[6] & 0b10000000) >> 7)];
+  out[51] = alphaLookup[ (data[6] & 0b01110000) >> 4];
+  out[47] = alphaLookup[ (data[6] & 0b00001110) >> 1];
+  out[43] = alphaLookup[((data[6] & 0b00000001) << 2) + ((data[5] & 0b11000000) >> 6)];
+  out[39] = alphaLookup[ (data[5] & 0b00111000) >> 3];
+  out[35] = alphaLookup[ (data[5] & 0b00000111) >> 0];
   
   return out;
 }

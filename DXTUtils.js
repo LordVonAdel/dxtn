@@ -1,9 +1,9 @@
 module.exports = {
-  generateDXT1Lookup(colorValue0, colorValue1) {
+  generateDXT1Lookup(colorValue0, colorValue1, out = null) {
     let color0 = this.getComponentsFromRGB565(colorValue0);
     let color1 = this.getComponentsFromRGB565(colorValue1);
 
-    let lookup = new Uint8Array(16);
+    let lookup = out || new Uint8Array(16);
 
     if (colorValue0 > colorValue1) {
       // Non transparent mode
@@ -51,6 +51,28 @@ module.exports = {
     }
 
     return lookup;
+  },
+
+  generateDXT5AlphaLookup(alpha0, alpha1, array = null) {
+    let alphaLookup = array || new Uint8Array(8);
+    alphaLookup[0] = alpha0;
+    alphaLookup[1] = alpha1;
+    if (alpha0 > alpha1) {
+      alphaLookup[2] = Math.round((6 * alpha0 + 1 * alpha1) / 7);
+      alphaLookup[3] = Math.round((5 * alpha0 + 2 * alpha1) / 7);
+      alphaLookup[4] = Math.round((4 * alpha0 + 3 * alpha1) / 7);
+      alphaLookup[5] = Math.round((3 * alpha0 + 4 * alpha1) / 7);
+      alphaLookup[6] = Math.round((2 * alpha0 + 5 * alpha1) / 7);
+      alphaLookup[7] = Math.round((1 * alpha0 + 6 * alpha1) / 7);
+    } else {
+      alphaLookup[2] = Math.round((4 * alpha0 + 1 * alpha1) / 5);
+      alphaLookup[3] = Math.round((3 * alpha0 + 2 * alpha1) / 5);
+      alphaLookup[4] = Math.round((2 * alpha0 + 3 * alpha1) / 5);
+      alphaLookup[5] = Math.round((1 * alpha0 + 4 * alpha1) / 5);
+      alphaLookup[6] = 0;
+      alphaLookup[7] = 255;
+    }
+    return alphaLookup;
   },
 
   getError(pixels, block) {
