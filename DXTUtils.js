@@ -113,5 +113,13 @@ module.exports = {
 
   makeRGB565(r, g, b) {
     return ((r & 0b11111000) << 8) | ((g & 0b11111100) << 3) | ((b & 0b11111000) >> 3);
+  },
+
+  shiftColorValue(color, amount) {
+    let components = this.getComponentsFromRGB565(color);
+    let r = Math.min(Math.max(Math.round(components.r * amount), 0), 1);
+    let g = Math.min(Math.max(Math.round(components.r * amount), 0), 1);
+    let b = Math.min(Math.max(Math.round(components.r * amount), 0), 1);
+    return this.makeRGB565(r, g, b);
   }
 }

@@ -62,17 +62,34 @@ function compressBlockDXT1(pixels, outArray = null, forceNoAlpha = false) {
     }
   }
 
-  let lookup = DXTUtils.generateDXT1Lookup(c0, c1, colorLookupBuffer);
+  // Create different palettes and use the one with the least amount of error
+  let loopkups = [
+    DXTUtils.generateDXT1Lookup(c0, c1, colorLookupBuffer),
+    DXTUtils.generateDXT1Lookup(DXTUtils.shiftColorValue(c0, 1.1), DXTUtils.shiftColorValue(c1, 0.9), colorLookupBuffer),
+  ];
 
+  let results = [];
   let out = outArray || new Uint8Array(DXT1BlockSize);
-  let indices = [];
+  for (let lookup of loopkups) {
+    let indices = [];
 
-  for (let i = 0; i < pixels.length; i+= 4) {
-    let index = DXTUtils.findNearestOnLookup([
-      pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]
-    ], lookup);
-    indices.push(index);
+    let processedColors = [];
+    for (let i = 0; i < pixels.length; i+= 4) {
+      let index = DXTUtils.findNearestOnLookup([
+        pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]
+      ], lookup);
+      processedColors.push(lookup[index], lookup[index], lookup[index], lookup[index]);
+      indices.push(index);
+    }
+
+    let error = DXTUtils.getError(pixels, processedColors);
+    results.push({
+      error,
+      indices
+    });
   }
+
+  let indices = results.reduce((result, acc) => acc.error < result.error ? acc : result, {error: Infinity}).indices;
 
   out[0] = c0 & 0x00ff;
   out[1] = (c0 & 0xff00) >> 8;
