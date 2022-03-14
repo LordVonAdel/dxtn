@@ -1,6 +1,6 @@
 {
   "name": "dxtn",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Converts DXT aka BC compressed image data to RGBA8888 and back",
   "main": "index.js",
   "author": "Adrian Urban",
